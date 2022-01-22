@@ -70,7 +70,25 @@ ui <- fluidPage(
     
     h3("Here are your train options:"),
     
-    dataTableOutput("mytable")
+    dataTableOutput("mytable"),
+    
+    tags$footer(HTML('<style>
+                      .footer {
+                        position: fixed;
+                        left: 0;
+                        bottom: 0;
+                        width: 100%;
+                        
+                        color: black;
+                        text-align: center;
+                      }
+                      </style>
+                      
+                      <div class="footer">
+                      <p>&copy 2022</p>
+                        <a href="https://github.com/jared32/">Jared Minetola</a></p>
+                      </div>')
+                )
   )
 )
 
@@ -598,21 +616,9 @@ server <- (function(input,output) {
              sum = a+a2+a3+a4+a5+a6+a7+a8+a9+a10+a11+a12+a13+a14+a15+
                b+b2+b3+b4+b5+b6+b7+b8+b9+b10+b11+b12+b13+b14+b15,
              #Correct for Double Blank = 50
-             sum = case_when(d=="0-0"|
-                               d2=="0-0"|
-                               d3=="0-0"|
-                               d4=="0-0"|
-                               d5=="0-0"|
-                               d6=="0-0"|
-                               d7=="0-0"|
-                               d8=="0-0"|
-                               d9=="0-0"|
-                               d10=="0-0"|
-                               d11=="0-0"|
-                               d12=="0-0"|
-                               d13=="0-0"|
-                               d14=="0-0"|
-                               d15=="0-0"~ sum+50,
+             sum = case_when(d=="0-0"| d2=="0-0"| d3=="0-0"| d4=="0-0"| d5=="0-0"| 
+                               d6=="0-0"| d7=="0-0"| d8=="0-0"| d9=="0-0"| d10=="0-0"|
+                               d11=="0-0"| d12=="0-0"| d13=="0-0"| d14=="0-0"| d15=="0-0"~ sum+50,
                              TRUE~sum)) %>% 
       mutate(double = case_when(a==b & !is.na(d) & !is.na(d2)~1,TRUE ~0),
              double2 = case_when(a2==b2 & !is.na(d2) & !is.na(d3) ~1,TRUE ~0),
