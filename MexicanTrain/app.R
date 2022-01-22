@@ -1,0 +1,671 @@
+library(tidyverse)
+library(shiny)
+library(DT)
+
+#List All Dominoes, including Flipped Permutation 0-9
+# all <- data.frame(Dominoes = c(
+#   "0-0","0-1","0-2","0-3","0-4","0-5","0-6","0-7","0-8","0-9",
+#   "1-0","1-1","1-2","1-3","1-4","1-5","1-6","1-7","1-8","1-9",
+#   "2-0","2-1","2-2","2-3","2-4","2-5","2-6","2-7","2-8","2-9",
+#   "3-0","3-1","3-2","3-3","3-4","3-5","3-6","3-7","3-8","3-9",
+#   "4-0","4-1","4-2","4-3","4-4","4-5","4-6","4-7","4-8","4-9",
+#   "5-0","5-1","5-2","5-3","5-4","5-5","5-6","5-7","5-8","5-9",
+#   "6-0","6-1","6-2","6-3","6-4","6-5","6-6","6-7","6-8","6-9",
+#   "7-0","7-1","7-2","7-3","7-4","7-5","7-6","7-7","7-8","7-9",
+#   "8-0","8-1","8-2","8-3","8-4","8-5","8-6","8-7","8-8","8-9",
+#   "9-0","9-1","9-2","9-3","9-4","9-5","9-6","9-7","9-8","9-9"
+#   ))
+
+# List All Dominoes excluding Flipped Permutation
+all <- data.frame(Dominoes = c(
+  "0-0","0-1","0-2","0-3","0-4","0-5","0-6","0-7","0-8","0-9","0-10","0-11","0-12",
+  "1-1","1-2","1-3","1-4","1-5","1-6","1-7","1-8","1-9","1-10","1-11","1-12",
+  "2-2","2-3","2-4","2-5","2-6","2-7","2-8","2-9","2-10","2-11","2-12",
+  "3-3","3-4","3-5","3-6","3-7","3-8","3-9","3-10","3-11","3-12",
+  "4-4","4-5","4-6","4-7","4-8","4-9","4-10","4-11","4-12",
+  "5-5","5-6","5-7","5-8","5-9","5-10","5-11","5-12",
+  "6-6","6-7","6-8","6-9","6-10","6-11","6-12",
+  "7-7","7-8","7-9","7-10","7-11","7-12",
+  "8-8","8-9","8-10","8-11","8-12",
+  "9-9","9-10","9-11","9-12",
+  "10-10","10-11","10-12",
+  "11-11","11-12",
+  "12-12"
+  ))
+
+#User Input Section
+ui <- fluidPage(
+  titlePanel("Mexican Train Dominoes Solver"),
+  fluidRow(
+    column(2,
+           selectInput("lead",
+                       "Leading Pip",
+                       c(0:12)
+           )
+    ),
+    
+    column(5,
+           
+           selectizeInput("dom",
+                          "Select Your Dominos:",
+                          all,
+                          multiple = TRUE,
+                          options = list(maxItems = 15)
+           )
+    ),
+    
+    column(4,
+           
+           img(src = "https://cdn.shopify.com/s/files/1/0876/1176/files/htp-mtdm-matching.gif",
+               height = 150,
+               align = "right")
+    )
+    
+  ),
+  
+  mainPanel(
+    
+    # h3("You have selected the following Dominoes:"),
+    # textOutput("dom"),
+    
+    h3("Here are your train options:"),
+    
+    dataTableOutput("mytable")
+  )
+)
+
+#Define server logic to plot various variables
+server <- (function(input,output) {
+  
+  #Gets Lead Pip and Dominoes ready for Processing
+  ######################################################################
+  
+  leadpip <- reactive({
+    paste(input$lead)
+  })
+  
+  output$mytable <- renderDataTable({
+    
+    req(input$dom) #prevents error message from showing
+    
+    dom_list <- reactive({
+      list(d = input$dom)
+      
+    })
+    ######################################################################
+    
+    df <- data.frame(dom_list())
+
+    #Break apart by pips for easy joining later
+    
+    # df <- df %>%
+    #   arrange(d) %>% 
+    #   mutate(a = substr(d,1,1),
+    #          b = substr(d,3,3))
+    
+    # test <- all %>% 
+    #   mutate(a= sapply(strsplit(Dominoes,"-"),'[',1),
+    #          b= sapply(strsplit(Dominoes,"-"),'[',2))
+    
+    df <- df %>%
+      arrange(d) %>% 
+      mutate(a= sapply(strsplit(d,"-"),'[',1),
+             b= sapply(strsplit(d,"-"),'[',2))
+    
+    #Find total sum of all Dominoes
+    df_tot <- df %>% 
+      mutate(a = as.numeric(a),
+             b = as.numeric(b),
+             #Option for Double Blank = 50
+             a = case_when(d=="0-0" ~25,
+                           TRUE ~a),
+             b = case_when(d=="0-0" ~25,
+                           TRUE ~b)) %>% 
+      summarise(total_sum = sum(a)+sum(b),
+                total_count = n())
+    
+    #Create Flips of each Domino
+    df_flip <- df %>% 
+      mutate(d_flip = paste(b,a,sep="-"),
+             a_flip = b,
+             b_flip = a) %>% 
+      select(-d,-a,-b) %>% 
+      rename(d=d_flip,
+             a=a_flip,
+             b=b_flip)
+    
+    #All possible 1st Dominoes
+    df <- unique(rbind(df,df_flip))
+    
+    #All possible with correct Leading Domino
+    df1 <- df %>% 
+      filter(a==leadpip())
+    
+    #Pick 2nd Donimno
+    df2 <- df %>% 
+      rename(d2=d,
+             a2=a,
+             b2=b)
+    
+    df2a <- df1 %>% 
+      left_join(df2, by = c("b" = "a2"),keep=T) %>% 
+      filter(#2nd is new
+        d2 != d,
+        #2nd isn't the flip of 1
+        !(b2==a & a2==b))
+    
+    df2 <- df1 %>% 
+      left_join(df2a)
+    
+    #pick 3rd domino
+    df3 <- df %>% 
+      rename(d3=d,
+             a3=a,
+             b3=b)
+    
+    df3a <- df2 %>% 
+      left_join(df3, by = c("b2" = "a3"),keep=T) %>% 
+      filter(#3rd is new
+        d3 != d2,
+        d3 != d,
+        #3rd isn't the flip of 1
+        !(b3==a & a3==b),
+        #3rd isn't the flip of 2
+        !(b3==a2 & a3==b2))
+    
+    df3 <- df2 %>% 
+      left_join(df3a)
+    
+    #pick 4th domino
+    df4 <- df %>% 
+      rename(d4=d,
+             a4=a,
+             b4=b)
+    
+    df4a <- df3 %>% 
+      left_join(df4, by = c("b3" = "a4"),keep=T) %>% 
+      filter(#4 is new
+        d4 != d3,
+        d4 != d2,
+        d4 != d,
+        #4 isn't the flip of 1
+        !(b4==a & a4==b),
+        #4 isn't the flip of 2
+        !(b4==a2 & a4==b2),
+        #4 isn't the flip of 3
+        !(b4==a3 & a4==b3))
+    
+    df4 <- df3 %>% 
+      left_join(df4a)
+    
+    #pick 5th domino
+    df5 <- df %>% 
+      rename(d5=d,
+             a5=a,
+             b5=b)
+    
+    df5a <- df4 %>% 
+      left_join(df5, by = c("b4" = "a5"),keep=T) %>%
+      filter(#5 is new
+        d5 != d4,
+        d5 != d3,
+        d5 != d2,
+        d5 != d,
+        #5 isn't the flip of 1
+        !(b5==a & a5==b),
+        #5 isn't the flip of 2
+        !(b5==a2 & a5==b2),
+        #5 isn't the flip of 3
+        !(b5==a3 & a5==b3),
+        #5 isn't the flip of 4
+        !(b5==a4 & a5==b4))
+    
+    df5 <- df4 %>% 
+      left_join(df5a)
+    
+    #pick 6th domino
+    df6 <- df %>% 
+      rename(d6=d,
+             a6=a,
+             b6=b)
+    
+    df6a <- df5 %>% 
+      left_join(df6, by = c("b5" = "a6"),keep=T) %>% 
+      filter(#6 is new
+        d6 != d5,
+        d6 != d4,
+        d6 != d3,
+        d6 != d2,
+        d6 != d,
+        #Check Flips
+        !(b6==a & a6==b),
+        !(b6==a2 & a6==b2),
+        !(b6==a3 & a6==b3),
+        !(b6==a4 & a6==b4),
+        !(b6==a5 & a6==b5)
+      )
+    
+    df6 <- df5 %>% 
+      left_join(df6a)
+    
+    #pick 7th domino
+    df7 <- df %>% 
+      rename(d7=d,
+             a7=a,
+             b7=b)
+    
+    df7a <- df6 %>% 
+      left_join(df7, by = c("b6" = "a7"),keep=T) %>% 
+      filter(#7 is new
+        d7 != d6,
+        d7 != d5,
+        d7 != d4,
+        d7 != d3,
+        d7 != d2,
+        d7 != d,
+        #Check Flips
+        !(b7==a & a7==b),
+        !(b7==a2 & a7==b2),
+        !(b7==a3 & a7==b3),
+        !(b7==a4 & a7==b4),
+        !(b7==a5 & a7==b5),
+        !(b7==a6 & a7==b6)
+      )
+    
+    df7 <- df6 %>% 
+      left_join(df7a)
+    
+    #pick 8th domino
+    df8 <- df %>% 
+      rename(d8=d,
+             a8=a,
+             b8=b)
+    
+    df8a <- df7 %>% 
+      left_join(df8, by = c("b7" = "a8"),keep=T) %>% 
+      filter(#8 is new
+        d8 != d7,
+        d8 != d6,
+        d8 != d5,
+        d8 != d4,
+        d8 != d3,
+        d8 != d2,
+        d8 != d,
+        #Check Flips
+        !(b8==a & a8==b),
+        !(b8==a2 & a8==b2),
+        !(b8==a3 & a8==b3),
+        !(b8==a4 & a8==b4),
+        !(b8==a5 & a8==b5),
+        !(b8==a6 & a8==b6),
+        !(b8==a7 & a8==b7)
+      )
+    
+    df8 <- df7 %>% 
+      left_join(df8a)
+    
+    #pick 9th domino
+    df9 <- df %>% 
+      rename(d9=d,
+             a9=a,
+             b9=b)
+    
+    df9a <- df8 %>% 
+      left_join(df9, by = c("b8" = "a9"),keep=T) %>% 
+      filter(#9 is new
+        d9 != d8,
+        d9 != d7,
+        d9 != d6,
+        d9 != d5,
+        d9 != d4,
+        d9 != d3,
+        d9 != d2,
+        d9 != d,
+        #Check Flips
+        !(b9==a & a9==b),
+        !(b9==a2 & a9==b2),
+        !(b9==a3 & a9==b3),
+        !(b9==a4 & a9==b4),
+        !(b9==a5 & a9==b5),
+        !(b9==a6 & a9==b6),
+        !(b9==a7 & a9==b7),
+        !(b9==a8 & a9==b8)
+      )
+    
+    df9 <- df8 %>% 
+      left_join(df9a)
+    
+    
+    #pick 10th domino
+    df10 <- df %>% 
+      rename(d10=d,
+             a10=a,
+             b10=b)
+    
+    df10a <- df9 %>% 
+      left_join(df10, by = c("b9" = "a10"),keep=T) %>% 
+      filter(#9 is new
+        d10 != d9,
+        d10 != d8,
+        d10 != d7,
+        d10 != d6,
+        d10 != d5,
+        d10 != d4,
+        d10 != d3,
+        d10 != d2,
+        d10 != d,
+        #Check Flips
+        !(b10==a & a10==b),
+        !(b10==a2 & a10==b2),
+        !(b10==a3 & a10==b3),
+        !(b10==a4 & a10==b4),
+        !(b10==a5 & a10==b5),
+        !(b10==a6 & a10==b6),
+        !(b10==a7 & a10==b7),
+        !(b10==a8 & a10==b8),
+        !(b10==a9 & a10==b9)
+      )
+    
+    df10 <- df9 %>% 
+      left_join(df10a)
+    
+    #pick 11th domino
+    df11 <- df %>% 
+      rename(d11=d,
+             a11=a,
+             b11=b)
+    
+    df11a <- df10 %>% 
+      left_join(df11, by = c("b10" = "a11"),keep=T) %>% 
+      filter(#11 is new
+        d11 != d10,
+        d11 != d9,
+        d11 != d8,
+        d11 != d7,
+        d11 != d6,
+        d11 != d5,
+        d11 != d4,
+        d11 != d3,
+        d11 != d2,
+        d11 != d,
+        #Check Flips
+        !(b11==a & a11==b),
+        !(b11==a2 & a11==b2),
+        !(b11==a3 & a11==b3),
+        !(b11==a4 & a11==b4),
+        !(b11==a5 & a11==b5),
+        !(b11==a6 & a11==b6),
+        !(b11==a7 & a11==b7),
+        !(b11==a8 & a11==b8),
+        !(b11==a9 & a11==b9),
+        !(b11==a10 & a11==b10)
+      )
+    
+    df11 <- df10 %>% 
+      left_join(df11a)
+    
+    #pick 12th domino
+    df12 <- df %>% 
+      rename(d12=d,
+             a12=a,
+             b12=b)
+    
+    df12a <- df11 %>% 
+      left_join(df12, by = c("b11" = "a12"),keep=T) %>% 
+      filter(#12 is new
+        d12 != d11,
+        d12 != d10,
+        d12 != d9,
+        d12 != d8,
+        d12 != d7,
+        d12 != d6,
+        d12 != d5,
+        d12 != d4,
+        d12 != d3,
+        d12 != d2,
+        d12 != d,
+        #Check Flips
+        !(b12==a & a12==b),
+        !(b12==a2 & a12==b2),
+        !(b12==a3 & a12==b3),
+        !(b12==a4 & a12==b4),
+        !(b12==a5 & a12==b5),
+        !(b12==a6 & a12==b6),
+        !(b12==a7 & a12==b7),
+        !(b12==a8 & a12==b8),
+        !(b12==a9 & a12==b9),
+        !(b12==a10 & a12==b10),
+        !(b12==a11 & a12==b11)
+      )
+    
+    df12 <- df11 %>% 
+      left_join(df12a)
+    
+    #pick 13th domino
+    df13 <- df %>% 
+      rename(d13=d,
+             a13=a,
+             b13=b)
+    
+    df13a <- df12 %>% 
+      left_join(df13, by = c("b12" = "a13"),keep=T) %>% 
+      filter(#13 is new
+        d13 != d12,
+        d13 != d11,
+        d13 != d10,
+        d13 != d9,
+        d13 != d8,
+        d13 != d7,
+        d13 != d6,
+        d13 != d5,
+        d13 != d4,
+        d13 != d3,
+        d13 != d2,
+        d13 != d,
+        #Check Flips
+        !(b13==a & a13==b),
+        !(b13==a2 & a13==b2),
+        !(b13==a3 & a13==b3),
+        !(b13==a4 & a13==b4),
+        !(b13==a5 & a13==b5),
+        !(b13==a6 & a13==b6),
+        !(b13==a7 & a13==b7),
+        !(b13==a8 & a13==b8),
+        !(b13==a9 & a13==b9),
+        !(b13==a10 & a13==b10),
+        !(b13==a11 & a13==b11),
+        !(b13==a12 & a13==b12)
+      )
+    
+    df13 <- df12 %>% 
+      left_join(df13a)
+    
+    #pick 14th domino
+    df14 <- df %>% 
+      rename(d14=d,
+             a14=a,
+             b14=b)
+    
+    df14a <- df13 %>% 
+      left_join(df14, by = c("b13" = "a14"),keep=T) %>% 
+      filter(#14 is new
+        d14 != d13,
+        d14 != d12,
+        d14 != d11,
+        d14 != d10,
+        d14 != d9,
+        d14 != d8,
+        d14 != d7,
+        d14 != d6,
+        d14 != d5,
+        d14 != d4,
+        d14 != d3,
+        d14 != d2,
+        d14 != d,
+        #Check Flips
+        !(b14==a & a14==b),
+        !(b14==a2 & a14==b2),
+        !(b14==a3 & a14==b3),
+        !(b14==a4 & a14==b4),
+        !(b14==a5 & a14==b5),
+        !(b14==a6 & a14==b6),
+        !(b14==a7 & a14==b7),
+        !(b14==a8 & a14==b8),
+        !(b14==a9 & a14==b9),
+        !(b14==a10 & a14==b10),
+        !(b14==a11 & a14==b11),
+        !(b14==a12 & a14==b12),
+        !(b14==a13 & a14==b13)
+      )
+    
+    df14 <- df13 %>% 
+      left_join(df14a)
+    
+    #pick 15th domino
+    df15 <- df %>% 
+      rename(d15=d,
+             a15=a,
+             b15=b)
+    
+    df15a <- df14 %>% 
+      left_join(df15, by = c("b14" = "a15"),keep=T) %>% 
+      filter(#15 is new
+        d15 != d14,
+        d15 != d13,
+        d15 != d12,
+        d15 != d11,
+        d15 != d10,
+        d15 != d9,
+        d15 != d8,
+        d15 != d7,
+        d15 != d6,
+        d15 != d5,
+        d15 != d4,
+        d15 != d3,
+        d15 != d2,
+        d15 != d,
+        #Check Flips
+        !(b15==a & a15==b),
+        !(b15==a2 & a15==b2),
+        !(b15==a3 & a15==b3),
+        !(b15==a4 & a15==b4),
+        !(b15==a5 & a15==b5),
+        !(b15==a6 & a15==b6),
+        !(b15==a7 & a15==b7),
+        !(b15==a8 & a15==b8),
+        !(b15==a9 & a15==b9),
+        !(b15==a10 & a15==b10),
+        !(b15==a11 & a15==b11),
+        !(b15==a12 & a15==b12),
+        !(b15==a13 & a15==b13),
+        !(b15==a14 & a15==b14)
+      )
+    
+    df15 <- df14 %>% 
+      left_join(df15a)
+    
+    df_final <- df15 %>% 
+      mutate(a = case_when(is.na(a) ~ 0, TRUE ~ as.numeric(a)),
+             a2 = case_when(is.na(a2) ~ 0, TRUE ~ as.numeric(a2)),
+             a3 = case_when(is.na(a3) ~ 0, TRUE ~ as.numeric(a3)),
+             a4 = case_when(is.na(a4) ~ 0, TRUE ~ as.numeric(a4)),
+             a5 = case_when(is.na(a5) ~ 0, TRUE ~ as.numeric(a5)),
+             a6 = case_when(is.na(a6) ~ 0, TRUE ~ as.numeric(a6)),
+             a7 = case_when(is.na(a7) ~ 0, TRUE ~ as.numeric(a7)),
+             a8 = case_when(is.na(a8) ~ 0, TRUE ~ as.numeric(a8)),
+             a9 = case_when(is.na(a9) ~ 0, TRUE ~ as.numeric(a9)),
+             a10 = case_when(is.na(a10) ~ 0, TRUE ~ as.numeric(a10)),
+             a11 = case_when(is.na(a11) ~ 0, TRUE ~ as.numeric(a11)),
+             a12 = case_when(is.na(a12) ~ 0, TRUE ~ as.numeric(a12)),
+             a13 = case_when(is.na(a13) ~ 0, TRUE ~ as.numeric(a13)),
+             a14 = case_when(is.na(a14) ~ 0, TRUE ~ as.numeric(a14)),
+             a15 = case_when(is.na(a15) ~ 0, TRUE ~ as.numeric(a15)),
+             b = case_when(is.na(b) ~ 0, TRUE ~ as.numeric(b)),
+             b2 = case_when(is.na(b2) ~ 0, TRUE ~ as.numeric(b2)),
+             b3 = case_when(is.na(b3) ~ 0, TRUE ~ as.numeric(b3)),
+             b4 = case_when(is.na(b4) ~ 0, TRUE ~ as.numeric(b4)),
+             b5 = case_when(is.na(b5) ~ 0, TRUE ~ as.numeric(b5)),
+             b6 = case_when(is.na(b6) ~ 0, TRUE ~ as.numeric(b6)),
+             b7 = case_when(is.na(b7) ~ 0, TRUE ~ as.numeric(b7)),
+             b8 = case_when(is.na(b8) ~ 0, TRUE ~ as.numeric(b8)),
+             b9 = case_when(is.na(b9) ~ 0, TRUE ~ as.numeric(b9)),
+             b10 = case_when(is.na(b10) ~ 0, TRUE ~ as.numeric(b10)),
+             b11 = case_when(is.na(b11) ~ 0, TRUE ~ as.numeric(b11)),
+             b12 = case_when(is.na(b12) ~ 0, TRUE ~ as.numeric(b12)),
+             b13 = case_when(is.na(b13) ~ 0, TRUE ~ as.numeric(b13)),
+             b14 = case_when(is.na(b14) ~ 0, TRUE ~ as.numeric(b14)),
+             b15 = case_when(is.na(b15) ~ 0, TRUE ~ as.numeric(b15)),
+             sum = a+a2+a3+a4+a5+a6+a7+a8+a9+a10+a11+a12+a13+a14+a15+
+               b+b2+b3+b4+b5+b6+b7+b8+b9+b10+b11+b12+b13+b14+b15,
+             #Correct for Double Blank = 50
+             sum = case_when(d=="0-0"|
+                               d2=="0-0"|
+                               d3=="0-0"|
+                               d4=="0-0"|
+                               d5=="0-0"|
+                               d6=="0-0"|
+                               d7=="0-0"|
+                               d8=="0-0"|
+                               d9=="0-0"|
+                               d10=="0-0"|
+                               d11=="0-0"|
+                               d12=="0-0"|
+                               d13=="0-0"|
+                               d14=="0-0"|
+                               d15=="0-0"~ sum+50,
+                             TRUE~sum)) %>% 
+      mutate(double = case_when(a==b & !is.na(d) & !is.na(d2)~1,TRUE ~0),
+             double2 = case_when(a2==b2 & !is.na(d2) & !is.na(d3) ~1,TRUE ~0),
+             double3 = case_when(a3==b3 & !is.na(d3) & !is.na(d4) ~1,TRUE ~0),
+             double4 = case_when(a4==b4 & !is.na(d4) & !is.na(d5) ~1,TRUE ~0),
+             double5 = case_when(a5==b5 & !is.na(d5) & !is.na(d6) ~1,TRUE ~0),
+             double6 = case_when(a6==b6 & !is.na(d6) & !is.na(d7) ~1,TRUE ~0),
+             double7 = case_when(a7==b7 & !is.na(d7) & !is.na(d8) ~1,TRUE ~0),
+             double8 = case_when(a8==b8 & !is.na(d8) & !is.na(d9) ~1,TRUE ~0),
+             double9 = case_when(a9==b9 & !is.na(d9) & !is.na(d10) ~1,TRUE ~0),
+             double10 = case_when(a10==b10 & !is.na(d10) & !is.na(d11) ~1,TRUE ~0),
+             double11 = case_when(a11==b11 & !is.na(d11) & !is.na(d12) ~1,TRUE ~0),
+             double12 = case_when(a12==b12 & !is.na(d12) & !is.na(d13) ~1,TRUE ~0),
+             double13 = case_when(a13==b13 & !is.na(d13) & !is.na(d14) ~1,TRUE ~0),
+             double14 = case_when(a14==b14 & !is.na(d14) & !is.na(d15) ~1,TRUE ~0),
+             no_doubles = as.integer(double+double2+double3+double4+double5+double6+double7+
+                                       double8+double9+double10+double11+double12+double13+double14),
+             sum = as.integer(sum)) %>% 
+      select(d,d2,d3,d4,d5,d6,d7,d8,d9,d10,d11,d12,d13,d14,d15,sum,no_doubles) %>% 
+      mutate(count = as.integer(rowSums(!is.na(select(., -c(sum,no_doubles))))),
+             turns = count-no_doubles,
+             remaining_sum = as.integer(df_tot$total_sum-sum),
+             remaining_count = as.integer(df_tot$total_count-count)
+      ) %>% 
+      select(-no_doubles) %>% 
+      arrange(-sum,turns) %>% 
+      rename("1st"=d,
+             "2nd"=d2,
+             "3rd"=d3,
+             "4th"=d4,
+             "5th"=d5,
+             "6th"=d6,
+             "7th"=d7,
+             "8th"=d8,
+             "9th"=d9,
+             "10th"=d10,
+             "11th"=d11,
+             "12th"=d12,
+             "13th"=d13,
+             "14th"=d14,
+             "15th"=d15,
+             "Dominoes Used" = count,
+             "Turns Played" = turns,
+             "Points Used" = sum,
+             "Dominoes Remaining" = remaining_count,
+             "Points Remaining" = remaining_sum)
+    
+    df_final[is.na(df_final)] <- ""
+    df_final
+    
+  })
+  
+  
+})
+
+shinyApp(ui,server)
